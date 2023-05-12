@@ -35,7 +35,7 @@ class Chatbot:
         self.config = config
         self.session = requests.Session()
         if "proxy" in config:
-            if isinstance(config["proxy"], str) is False:
+            if not isinstance(config["proxy"], str):
                 raise Exception("Proxy must be a string!")
             proxies = {
                 "http": config["proxy"],
@@ -57,9 +57,7 @@ class Chatbot:
             pass
         elif "access_token" in config:
             self.__refresh_headers(config["access_token"])
-        elif "session_token" in config:
-            pass
-        else:
+        elif "session_token" not in config:
             raise Exception("No login details provided!")
         if "access_token" not in config:
             try:
@@ -163,7 +161,7 @@ class Chatbot:
         )  # for rollback
         self.parent_id_prev_queue.append(data["parent_message_id"])
         response = self.session.post(
-            url=BASE_URL + "api/conversation",
+            url=f"{BASE_URL}api/conversation",
             data=json.dumps(data),
             timeout=timeout,
             stream=True,
@@ -188,8 +186,8 @@ class Chatbot:
             except json.decoder.JSONDecodeError:
                 continue
             if not self.__check_fields(line):
-                raise Exception("Field missing. Details: " + str(line))
-                
+                raise Exception(f"Field missing. Details: {str(line)}")
+
             message = line["message"]["content"]["parts"][0]
             conversation_id = line["conversation_id"]
             parent_id = line["message"]["id"]
@@ -207,9 +205,7 @@ class Chatbot:
     def __check_fields(self, data: dict) -> bool:
         try:
             data["message"]["content"]
-        except TypeError:
-            return False
-        except KeyError:
+        except (TypeError, KeyError):
             return False
         return True
 
@@ -228,7 +224,7 @@ class Chatbot:
         :param offset: Integer
         :param limit: Integer
         """
-        url = BASE_URL + f"api/conversations?offset={offset}&limit={limit}"
+        url = f"{BASE_URL}api/conversations?offset={offset}&limit={limit}"
         response = self.session.get(url)
         self.__check_response(response)
         data = json.loads(response.text)
@@ -239,21 +235,20 @@ class Chatbot:
         Get message history
         :param id: UUID of conversation
         """
-        url = BASE_URL + f"api/conversation/{convo_id}"
+        url = f"{BASE_URL}api/conversation/{convo_id}"
         response = self.session.get(url)
         if encoding != None:
           response.encoding = encoding
         else:
           response.encoding = response.apparent_encoding
         self.__check_response(response)
-        data = json.loads(response.text)
-        return data
+        return json.loads(response.text)
 
     def gen_title(self, convo_id, message_id):
         """
         Generate title for conversation
         """
-        url = BASE_URL + f"api/conversation/gen_title/{convo_id}"
+        url = f"{BASE_URL}api/conversation/gen_title/{convo_id}"
         response = self.session.post(
             url,
             data=json.dumps(
@@ -268,7 +263,7 @@ class Chatbot:
         :param id: UUID of conversation
         :param title: String
         """
-        url = BASE_URL + f"api/conversation/{convo_id}"
+        url = f"{BASE_URL}api/conversation/{convo_id}"
         response = self.session.patch(url, data=f'{{"title": "{title}"}}')
         self.__check_response(response)
 
@@ -277,7 +272,7 @@ class Chatbot:
         Delete conversation
         :param id: UUID of conversation
         """
-        url = BASE_URL + f"api/conversation/{convo_id}"
+        url = f"{BASE_URL}api/conversation/{convo_id}"
         response = self.session.patch(url, data='{"is_visible": false}')
         self.__check_response(response)
 
@@ -285,7 +280,7 @@ class Chatbot:
         """
         Delete all conversations
         """
-        url = BASE_URL + "api/conversations"
+        url = f"{BASE_URL}api/conversations"
         response = self.session.patch(url, data='{"is_visible": false}')
         self.__check_response(response)
 
@@ -332,11 +327,7 @@ def get_input(prompt):
             break
         lines.append(line)
 
-    # Join the lines, separated by newlines, and store the result
-    user_input = "\n".join(lines)
-
-    # Return the input
-    return user_input
+    return "\n".join(lines)
 
 
 def configure():
@@ -344,15 +335,12 @@ def configure():
     Looks for a config file in the following locations:
     """
     config_files = ["config.json"]
-    xdg_config_home = getenv("XDG_CONFIG_HOME")
-    if xdg_config_home:
+    if xdg_config_home := getenv("XDG_CONFIG_HOME"):
         config_files.append(f"{xdg_config_home}/revChatGPT/config.json")
-    user_home = getenv("HOME")
-    if user_home:
+    if user_home := getenv("HOME"):
         config_files.append(f"{user_home}/.config/revChatGPT/config.json")
 
-    config_file = next((f for f in config_files if exists(f)), None)
-    if config_file:
+    if config_file := next((f for f in config_files if exists(f)), None):
         with open(config_file, encoding="utf-8") as f:
             config = json.load(f)
     else:
@@ -411,9 +399,8 @@ def main(config: dict):
 
     while True:
         prompt = get_input("\nYou:\n")
-        if prompt.startswith("!"):
-            if handle_commands(prompt):
-                continue
+        if prompt.startswith("!") and handle_commands(prompt):
+            continue
 
         print("Chatbot: ")
         prev_text = ""
